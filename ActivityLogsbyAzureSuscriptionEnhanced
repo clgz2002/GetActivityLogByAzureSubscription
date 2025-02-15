@@ -1,0 +1,63 @@
+function ListCreateEvents {
+    param (
+        [parameter(Mandatory=$true)]
+        [string]$MySubscriptionName,
+
+        [parameter(Mandatory=$true)]
+        [datetime]$MyStartDate,
+
+        [parameter(Mandatory=$true)]
+        [datetime]$MyEndDate,
+
+        [parameter(Mandatory=$true)]
+        [ValidateSet("create", "delete")]
+        [string]$TypeOfEvent
+    )
+
+    try {
+        Set-AzContext -SubscriptionName $MySubscriptionName
+
+        # Set the start and end time for the logs
+        $startDate = $MyStartDate
+        $endDate = $MyEndDate
+
+        # Get the activity logs within the specified time range
+        $activityLogs = Get-AzLog -StartTime $startDate -EndTime $endDate
+
+        # Filter logs based on the type of event
+        $filteredLogs = switch ($TypeOfEvent) {
+            "create" { $activityLogs | Where-Object { $_.OperationName -like "*create*" -and $_.Status -eq "Succeeded" } }
+            "delete" { $activityLogs | Where-Object { $_.OperationName -like "*delete*" -and $_.Status -eq "Succeeded" } }
+        }
+
+        Write-Host "$TypeOfEvent Events From:" $startDate " To:" $endDate
+        $filteredLogs | Format-Table -Property ResourceGroupName, ResourceProviderName, OperationName, Status, Category, SubmissionTimestamp, Caller -AutoSize
+    }
+    catch {
+        Write-Error "An error occurred: $_"
+    }
+}
+
+# Get all subscriptions and filter out those containing "Visual" or "Microsoft", then sort by Name
+$MySubscriptions = Get-AzSubscription | Where-Object { 
+    $_.Name -notlike '*Visual*' -and $_.Name -notlike '*Microsoft*' 
+} | Sort-Object -Property Name | Select-Object -ExpandProperty Name
+
+# Define start and end dates
+$startDate = Get-Date '2023-12-01'
+$endDate = Get-Date '2023-12-31'
+
+# Iterate over each subscription and call the function
+foreach ($Subscription in $MySubscriptions) {
+    ListCreateEvents -MySubscriptionName $Subscription -MyStartDate $startDate -MyEndDate $endDate -TypeOfEvent 'delete'
+}
+
+<#
+# Get all subscriptions and filter out those containing "Visual" or "Microsoft", then sort by Name
+$subscriptions = Get-AzSubscription | Where-Object { 
+    $_.Name -notlike '*Visual*' -and $_.Name -notlike '*Microsoft*' 
+} | Sort-Object -Property Name
+# Display the filtered subscriptions
+$subscriptions
+$MySubscriptions
+#>
